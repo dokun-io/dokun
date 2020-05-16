@@ -238,7 +238,7 @@ func destroyApp(app string, noUserWarn bool) {
 		removeOpts := docker.RemoveContainerOptions{
 			ID:            container.ID,
 			RemoveVolumes: false,
-			Force:         false,
+			Force:         true,
 			Context:       ctx,
 		}
 		dockerClient.RemoveContainer(removeOpts)
