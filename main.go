@@ -1,22 +1,26 @@
 package main
 
 import (
-	//"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
+	"os/user"
+	"path"
+	"strconv"
 	"strings"
-	// "time"
 
 	docker "github.com/fsouza/go-dockerclient"
+	git "github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 	"github.com/teris-io/shortid"
 )
 
-func deploy(appName string, repoDir string) {
+func deployRepo(appName string, repoDir string) {
 	dockerClient, err := docker.NewClient("unix:///var/run/docker.sock")
 	if err != nil {
 		log.Fatal(err)
@@ -136,7 +140,51 @@ func deploy(appName string, repoDir string) {
 	fmt.Println("Ready")
 }
 
+func createApp(app string, noUserWarn bool) {
+	uid := os.Geteuid()
+	usr, err := user.LookupId(strconv.Itoa(uid))
+	if err != nil {
+		panic(err)
+	}
+
+	if usr.Username != "dokun" && !noUserWarn {
+		fmt.Println("Running as non-dokun user. Have you enabled setuid on dokun executable and set the owner of the executable as doku?")
+		os.Exit(1)
+	}
+
+	repoPath := path.Join(usr.HomeDir, app+".git")
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = git.PlainInit(repoPath, true)
+	if err != nil {
+		panic(err)
+	}
+
+	postReceiveScript := []byte("#!/bin/sh\n\ndokun deploy-repo " + app + " \"$(pwd)\"\n")
+
+	hooksDir := path.Join(repoPath, "hooks")
+	err = os.Mkdir(hooksDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	hookPath := path.Join(hooksDir, "post-receive")
+	err = ioutil.WriteFile(hookPath, postReceiveScript, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Ready. Add the remote to your project:")
+	fmt.Println("\t$ git remote add " + usr.Username + "@" + hostname + ":/" + app + ".git")
+}
+
 func main() {
+	var noUserWarn bool
+
 	var cmdDeployRepo = &cobra.Command{
 		Use:    "deploy-repo [app] [path]",
 		Hidden: true,
@@ -145,11 +193,20 @@ func main() {
 			appName := args[0]
 			repoDir := args[1]
 			fmt.Println("Deploying: " + appName)
-			deploy(appName, repoDir)
+			deployRepo(appName, repoDir)
+		},
+	}
+
+	var cmdCreateApp = &cobra.Command{
+		Use:   "create [app]",
+		Short: "Initializes git repository for an application.",
+		Run: func(cmd *cobra.Command, args []string) {
+			createApp(args[0], noUserWarn)
 		},
 	}
 
 	var rootCmd = &cobra.Command{Use: "cmd"}
-	rootCmd.AddCommand(cmdDeployRepo)
+	rootCmd.PersistentFlags().BoolVarP(&noUserWarn, "no-user-warn", "u", false, "disable warning when setuid not set")
+	rootCmd.AddCommand(cmdDeployRepo, cmdCreateApp)
 	rootCmd.Execute()
 }
