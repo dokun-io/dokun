@@ -16,7 +16,7 @@ import (
 	"github.com/teris-io/shortid"
 )
 
-func deploy(projectName string, repoDir string) {
+func deploy(appName string, repoDir string) {
 	dockerClient, err := docker.NewClient("unix:///var/run/docker.sock")
 	if err != nil {
 		log.Fatal(err)
@@ -38,7 +38,7 @@ func deploy(projectName string, repoDir string) {
 		panic(err)
 	}
 
-	imageName := projectName
+	imageName := appName
 
 	buildInput := bytes.NewReader(archiveOutput)
 	buildOutput := bytes.NewBuffer(nil)
@@ -65,7 +65,7 @@ func deploy(projectName string, repoDir string) {
 
 	listOpts := docker.ListContainersOptions{
 		Filters: map[string][]string{
-			"label": []string{"io.dokun.project=" + projectName},
+			"label": []string{"io.dokun.app=" + appName},
 		},
 	}
 
@@ -76,15 +76,15 @@ func deploy(projectName string, repoDir string) {
 
 	fmt.Println("Starting new containers...")
 
-	containerName := projectName + "-" + uuid
+	containerName := appName + "-" + uuid
 
 	createOpts := docker.CreateContainerOptions{
 		Name: containerName,
 		Config: &docker.Config{
 			Image: imageName + ":latest",
 			Labels: map[string]string{
-				"io.dokun.project": projectName,
-				"io.dokun.gitRef":  gitRef,
+				"io.dokun.app":    appName,
+				"io.dokun.gitRef": gitRef,
 			},
 		},
 		HostConfig:       &docker.HostConfig{},
@@ -115,7 +115,7 @@ func deploy(projectName string, repoDir string) {
 		All: true,
 		Filters: map[string][]string{
 			"status": []string{"exited"},
-			"label":  []string{"io.dokun.project=" + projectName},
+			"label":  []string{"io.dokun.app=" + appName},
 		},
 	}
 	exitedContainers, err := dockerClient.ListContainers(listOpts)
@@ -138,14 +138,14 @@ func deploy(projectName string, repoDir string) {
 
 func main() {
 	var cmdDeployRepo = &cobra.Command{
-		Use:    "deploy-repo [project] [path]",
+		Use:    "deploy-repo [app] [path]",
 		Hidden: true,
 		Args:   cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			projectName := args[0]
+			appName := args[0]
 			repoDir := args[1]
-			fmt.Println("Deploying: " + projectName)
-			deploy(projectName, repoDir)
+			fmt.Println("Deploying: " + appName)
+			deploy(appName, repoDir)
 		},
 	}
 
