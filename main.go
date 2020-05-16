@@ -293,6 +293,7 @@ func main() {
 	var cmdDestroyApp = &cobra.Command{
 		Use:   "destroy [app]",
 		Short: "Removes git repository and cleans docker images and containers.",
+		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			destroyApp(args[0], noUserWarn)
 		},
