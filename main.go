@@ -210,7 +210,7 @@ func createApp(app string, noUserWarn bool) {
 	}
 
 	fmt.Println("Ready. Add the remote to your project:")
-	fmt.Println("\t$ git remote add " + usr.Username + "@" + hostname + ":/" + app + ".git")
+	fmt.Println("\t$ git remote add dokun " + usr.Username + "@" + hostname + ":" + app + ".git")
 }
 
 func destroyApp(app string, noUserWarn bool) {
