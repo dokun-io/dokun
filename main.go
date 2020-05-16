@@ -42,7 +42,12 @@ func deployRepo(appName string, repoDir string) {
 		panic(err)
 	}
 
-	imageName := appName
+	imageName := "dokun/" + appName
+
+	labels := map[string]string{
+		"io.dokun.app":    appName,
+		"io.dokun.gitRef": gitRef,
+	}
 
 	buildInput := bytes.NewReader(archiveOutput)
 	buildOutput := bytes.NewBuffer(nil)
@@ -50,6 +55,7 @@ func deployRepo(appName string, repoDir string) {
 		Name:         imageName,
 		InputStream:  buildInput,
 		OutputStream: buildOutput,
+		Labels:       labels,
 	}
 	if err := dockerClient.BuildImage(opts); err != nil {
 		log.Fatal(err)
@@ -85,11 +91,8 @@ func deployRepo(appName string, repoDir string) {
 	createOpts := docker.CreateContainerOptions{
 		Name: containerName,
 		Config: &docker.Config{
-			Image: imageName + ":latest",
-			Labels: map[string]string{
-				"io.dokun.app":    appName,
-				"io.dokun.gitRef": gitRef,
-			},
+			Image:  imageName + ":latest",
+			Labels: labels,
 		},
 		HostConfig:       &docker.HostConfig{},
 		NetworkingConfig: &docker.NetworkingConfig{},
