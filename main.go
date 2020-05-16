@@ -1,24 +1,56 @@
 package main
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"os/user"
 	"path"
 	"strconv"
-	"strings"
+	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/teris-io/shortid"
 )
+
+func archiveGitRepo(repo *git.Repository, hash plumbing.Hash, tarWriter *io.PipeWriter) {
+	tr := tar.NewWriter(tarWriter)
+	commit, err := repo.CommitObject(hash)
+	if err != nil {
+		log.Fatal(err)
+	}
+	files, err := commit.Files()
+	if err != nil {
+		log.Fatal(err)
+	}
+	t := time.Now()
+	for {
+		file, err := files.Next()
+		if err != nil {
+			if err != io.EOF {
+				log.Fatal(err)
+			}
+			break
+		}
+		tr.WriteHeader(&tar.Header{Name: file.Name, Size: file.Size, ModTime: t, AccessTime: t, ChangeTime: t})
+		reader, err := file.Blob.Reader()
+		if err != nil {
+			log.Fatal(err)
+		}
+		io.Copy(tr, reader)
+	}
+	tr.Close()
+	tarWriter.Close()
+}
 
 func deployRepo(appName string, repoDir string) {
 	dockerClient, err := docker.NewClient("unix:///var/run/docker.sock")
@@ -26,21 +58,18 @@ func deployRepo(appName string, repoDir string) {
 		log.Fatal(err)
 	}
 
-	revParse := exec.Command("git", "rev-parse", "--short", "master")
-	revParse.Dir = repoDir
-	revParseOutput, err := revParse.Output()
+	repo, err := git.PlainOpen(repoDir)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-
-	gitRef := strings.TrimSpace(string(revParseOutput))
-
-	archive := exec.Command("git", "archive", "master")
-	archive.Dir = repoDir
-	archiveOutput, err := archive.Output()
+	hash, err := repo.ResolveRevision("master")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+	gitRef := hash.String()
+
+	tarReader, tarWriter := io.Pipe()
+	go archiveGitRepo(repo, *hash, tarWriter)
 
 	imageName := "dokun/" + appName
 
@@ -49,11 +78,10 @@ func deployRepo(appName string, repoDir string) {
 		"io.dokun.gitRef": gitRef,
 	}
 
-	buildInput := bytes.NewReader(archiveOutput)
 	buildOutput := bytes.NewBuffer(nil)
 	opts := docker.BuildImageOptions{
 		Name:         imageName,
-		InputStream:  buildInput,
+		InputStream:  tarReader,
 		OutputStream: buildOutput,
 		Labels:       labels,
 	}
