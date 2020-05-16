@@ -285,6 +285,7 @@ func main() {
 	var cmdCreateApp = &cobra.Command{
 		Use:   "create [app]",
 		Short: "Initializes git repository for an application.",
+		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			createApp(args[0], noUserWarn)
 		},
