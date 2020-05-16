@@ -42,7 +42,12 @@ func deployRepo(appName string, repoDir string) {
 		panic(err)
 	}
 
-	imageName := appName
+	imageName := "dokun/" + appName
+
+	labels := map[string]string{
+		"io.dokun.app":    appName,
+		"io.dokun.gitRef": gitRef,
+	}
 
 	buildInput := bytes.NewReader(archiveOutput)
 	buildOutput := bytes.NewBuffer(nil)
@@ -50,6 +55,7 @@ func deployRepo(appName string, repoDir string) {
 		Name:         imageName,
 		InputStream:  buildInput,
 		OutputStream: buildOutput,
+		Labels:       labels,
 	}
 	if err := dockerClient.BuildImage(opts); err != nil {
 		log.Fatal(err)
@@ -85,11 +91,8 @@ func deployRepo(appName string, repoDir string) {
 	createOpts := docker.CreateContainerOptions{
 		Name: containerName,
 		Config: &docker.Config{
-			Image: imageName + ":latest",
-			Labels: map[string]string{
-				"io.dokun.app":    appName,
-				"io.dokun.gitRef": gitRef,
-			},
+			Image:  imageName + ":latest",
+			Labels: labels,
 		},
 		HostConfig:       &docker.HostConfig{},
 		NetworkingConfig: &docker.NetworkingConfig{},
@@ -182,6 +185,88 @@ func createApp(app string, noUserWarn bool) {
 	fmt.Println("\t$ git remote add " + usr.Username + "@" + hostname + ":/" + app + ".git")
 }
 
+func destroyApp(app string, noUserWarn bool) {
+	uid := os.Geteuid()
+	usr, err := user.LookupId(strconv.Itoa(uid))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if usr.Username != "dokun" && !noUserWarn {
+		fmt.Println("Running as non-dokun user. Have you enabled setuid on dokun executable and set the owner of the executable as doku?")
+		os.Exit(1)
+	}
+
+	repoPath := path.Join(usr.HomeDir, app+".git")
+
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		log.Fatal("No such application: " + app)
+	}
+
+	fmt.Println("This operation will destroy the git repository at " + repoPath + " and all of the associated docker containers and images.")
+	fmt.Println("For confirmation, please type the name of the application (" + app + "):")
+
+	var confirmationResponse string
+	_, err = fmt.Scanln(&confirmationResponse)
+	if confirmationResponse != app {
+		fmt.Println(confirmationResponse + "!=" + app + ". Exiting without destroying application.")
+		os.Exit(0)
+	}
+
+	dockerClient, err := docker.NewClient("unix:///var/run/docker.sock")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	listOpts := docker.ListContainersOptions{
+		All: true,
+		Filters: map[string][]string{
+			"label": []string{"io.dokun.app=" + app},
+		},
+	}
+
+	ctx := context.TODO()
+
+	fmt.Println("Removing containers...")
+
+	containers, err := dockerClient.ListContainers(listOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, container := range containers {
+		removeOpts := docker.RemoveContainerOptions{
+			ID:            container.ID,
+			RemoveVolumes: false,
+			Force:         true,
+			Context:       ctx,
+		}
+		dockerClient.RemoveContainer(removeOpts)
+	}
+
+	fmt.Println("Removing images...")
+
+	imageListOpts := docker.ListImagesOptions{
+		Filters: map[string][]string{
+			"label": []string{"io.dokun.app=" + app},
+		},
+	}
+	images, err := dockerClient.ListImages(imageListOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, image := range images {
+		dockerClient.RemoveImage(image.ID)
+	}
+
+	fmt.Println("Destroying " + repoPath + "...")
+	err = os.RemoveAll(repoPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 	var noUserWarn bool
 
@@ -205,8 +290,17 @@ func main() {
 		},
 	}
 
+	var cmdDestroyApp = &cobra.Command{
+		Use:   "destroy [app]",
+		Short: "Removes git repository and cleans docker images and containers.",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			destroyApp(args[0], noUserWarn)
+		},
+	}
+
 	var rootCmd = &cobra.Command{Use: "cmd"}
 	rootCmd.PersistentFlags().BoolVarP(&noUserWarn, "no-user-warn", "u", false, "disable warning when setuid not set")
-	rootCmd.AddCommand(cmdDeployRepo, cmdCreateApp)
+	rootCmd.AddCommand(cmdDeployRepo, cmdCreateApp, cmdDestroyApp)
 	rootCmd.Execute()
 }
