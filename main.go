@@ -148,7 +148,7 @@ func createApp(app string, noUserWarn bool) {
 	}
 
 	if usr.Username != "dokun" && !noUserWarn {
-		fmt.Println("Running as non-dokun user. Have you enabled setuid on dokun executable and set the owner of the executable as doku?")
+		fmt.Println("Running as non-dokun user. Have you enabled setuid on dokun executable and set the owner of the executable as dokun?")
 		os.Exit(1)
 	}
 
