@@ -8,7 +8,7 @@ __This is still under heavy development. Use it at your own risk.__
 
 ```
 $ useradd dokun -d /home/dokun -m
-$ usermod -G dokun
+$ usermod -aG docker dokun
 $ go build
 $ cp dokun /usr/local/bin
 $ sudo chown dokun /usr/local/bin/dokun
