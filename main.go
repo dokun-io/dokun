@@ -39,7 +39,11 @@ func archiveGitRepo(repo *git.Repository, hash plumbing.Hash, tarWriter *io.Pipe
 			}
 			break
 		}
-		tr.WriteHeader(&tar.Header{Name: file.Name, Size: file.Size, ModTime: t, AccessTime: t, ChangeTime: t})
+		fileMode, err := file.Mode.ToOSFileMode()
+		if err != nil {
+			log.Fatal(err)
+		}
+		tr.WriteHeader(&tar.Header{Name: file.Name, Size: file.Size, Mode: int64(fileMode), ModTime: t, AccessTime: t, ChangeTime: t})
 		reader, err := file.Blob.Reader()
 		if err != nil {
 			log.Fatal(err)
