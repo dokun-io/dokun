@@ -55,7 +55,8 @@ func archiveGitRepo(repo *git.Repository, hash plumbing.Hash, tarWriter *io.Pipe
 func deployRepo(appName string, repoDir string) {
 	dockerClient, err := docker.NewClient("unix:///var/run/docker.sock")
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Could not connect to docker at /var/run/docker.sock. Is docker running?")
+		os.Exit(1)
 	}
 
 	repo, err := git.PlainOpen(repoDir)
