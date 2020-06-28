@@ -2,8 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -78,20 +76,22 @@ func deployRepo(appName string, repoDir string) {
 		"io.dokun.gitRef": gitRef,
 	}
 
-	buildOutput := bytes.NewBuffer(nil)
+	outputReader, outputWriter := io.Pipe()
+
+	go func() {
+		defer outputWriter.Close()
+		io.Copy(os.Stdout, outputReader)
+	}()
+
 	opts := docker.BuildImageOptions{
 		Name:         imageName,
 		InputStream:  tarReader,
-		OutputStream: buildOutput,
+		OutputStream: outputWriter,
 		Labels:       labels,
 	}
+
 	if err := dockerClient.BuildImage(opts); err != nil {
 		log.Fatal(err)
-	}
-	scanner := bufio.NewScanner(buildOutput)
-	for scanner.Scan() {
-		m := scanner.Text()
-		fmt.Println(m)
 	}
 
 	ctx := context.TODO()

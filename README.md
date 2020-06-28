@@ -4,12 +4,18 @@ Self-hosted git push to docker build workflow.
 
 __This is still under heavy development. Use it at your own risk.__
 
+## Prerequisites
+
+Make sure you have installed the following software on your server:
+
+ * git
+ * docker
+
 ## Installation
 
 ```
 $ useradd dokun -d /home/dokun -m
 $ usermod -G dokun
-$ go build
 $ cp dokun /usr/local/bin
 $ sudo chown dokun /usr/local/bin/dokun
 $ sudo chmod u+s /usr/local/bin/dokun
